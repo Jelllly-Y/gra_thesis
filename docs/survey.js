@@ -12,12 +12,23 @@ let submitting = false;
 function loadDraft() {
   try {
     const draft = JSON.parse(localStorage.getItem(key));
-    if (draft && typeof draft.id === "string" && savedPages.includes(draft.page) && draft.answers) return draft;
+    if (draft && typeof draft.id === "string" && savedPages.includes(draft.page) && draft.answers) {
+      if (draft.page !== "setup") discardBets(draft.answers);
+      if (draft.pending && !Object.hasOwn(draft.pending, "duration_seconds")) {
+        // 旧版待提交草稿有练习次数，但没有计时起点。
+        const { SL1, P_A6 } = draft.pending;
+        draft.pending = { SL1, P_A6, duration_seconds: null, practice_retry_count: draft.attempts };
+      }
+      return draft;
+    }
   } catch { /* 新浏览器或损坏的草稿从首页开始。 */ }
   return { id: crypto.randomUUID(), page: "intro", attempts: 0, passed: false, roll: null, answers: {} };
 }
 
 let state = loadDraft();
+function discardBets(answers) {
+  for (const q of m.bets) delete answers[q.qid];
+}
 function persist() {
   try { localStorage.setItem(key, JSON.stringify(state)); }
   catch {
@@ -186,6 +197,7 @@ function showSetup() {
   show('<h2>任务设置</h2>' + paragraphs([m.setupIntro]) + m.bets.map(q => choices(q)).join("") + slider + button("下一页"), () => {
     if (!answered(m.bets)) return;
     if (!Number.isInteger(state.answers.SL1)) return fail("请点击选择你的指令", content.querySelector(".slider-dot"));
+    discardBets(state.answers);
     go("check");
   });
   listen(m.bets);
@@ -205,6 +217,7 @@ function complete() {
   state.answers = {};
   state.roll = null;
   delete state.pending;
+  delete state.startedAt;
   go("done");
 }
 async function submit() {
@@ -215,7 +228,12 @@ async function submit() {
   content.querySelector("fieldset").disabled = true;
   submitting = true;
   try {
-    state.pending ??= Object.fromEntries([...m.bets.map(q => q.qid), "SL1", "P_A6"].map(k => [k, state.answers[k]]));
+    state.pending ??= {
+      SL1: state.answers.SL1,
+      P_A6: state.answers.P_A6,
+      duration_seconds: Number.isFinite(state.startedAt) ? Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000)) : null,
+      practice_retry_count: state.attempts
+    };
     persist();
     const result = await request("submit", { id: state.id, answers: state.pending });
     if (!showStatus(result.status)) throw new Error("答卷尚未确认保存，请重试。");
@@ -231,7 +249,10 @@ function render() {
   progress.setAttribute("aria-valuenow", Math.round(percent));
   switch (state.page) {
     case "intro":
-      show('<h2>首页指导语</h2>' + paragraphs(m.intro) + button("开始作答"), () => go("task"));
+      show('<h2>首页指导语</h2>' + paragraphs(m.intro) + button("开始作答"), () => {
+        state.startedAt ??= Date.now();
+        go("task");
+      });
       break;
     case "task":
       show('<h2>任务说明</h2>' + paragraphs([m.taskIntro]) + '<div class="intro-content">' +

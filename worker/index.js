@@ -8,9 +8,10 @@ function json(data, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
 function validAnswers(answers) {
-  return answers && materials.bets.every(q => q.options.includes(answers[q.qid])) &&
-    Number.isInteger(answers.SL1) && answers.SL1 >= 0 && answers.SL1 < materials.slider.presets.length &&
-    materials.check.options.includes(answers.P_A6);
+  return answers && Number.isInteger(answers.SL1) && answers.SL1 >= 0 && answers.SL1 < materials.slider.presets.length &&
+    materials.check.options.includes(answers.P_A6) &&
+    (answers.duration_seconds === null || (Number.isSafeInteger(answers.duration_seconds) && answers.duration_seconds >= 0)) &&
+    Number.isInteger(answers.practice_retry_count) && answers.practice_retry_count >= 0 && answers.practice_retry_count < 5;
 }
 async function ipKey(request, secret) {
   const ip = request.headers.get("CF-Connecting-IP");
@@ -42,14 +43,17 @@ async function surveyRequest(request, env, path) {
   // 同一次请求的写入与后续读取保持顺序一致，包括启用了 D1 读副本的数据库。
   const db = env.DB.withSession("first-primary");
   if (path === "/api/submit") {
+    if (data.answers && Object.hasOwn(data.answers, "A1") && !Object.hasOwn(data.answers, "practice_retry_count")) {
+      return json({ error: "问卷已更新。请刷新当前页面，再点击提交，已选答案会保留。" }, 409);
+    }
     if (!validAnswers(data.answers)) return json({ error: "答卷不完整，请检查选项。" }, 400);
     const a = data.answers;
     // 一条 SQL 原子执行名额检查和写入；两种 UNIQUE 约束同时处理重试与同 IP 并发。
-    await db.prepare(`INSERT INTO supplement_responses (response_id, ip_key, a1,a2,a3,a4,a5, sl1, p_a6)
-      SELECT ?,?,?,?,?,?,?,?,?
+    await db.prepare(`INSERT INTO supplement_responses (response_id, ip_key, sl1, p_a6, duration_seconds, practice_retry_count)
+      SELECT ?,?,?,?,?,?
       WHERE ? IS NULL OR (SELECT COUNT(*) FROM supplement_responses) < ?
       ON CONFLICT DO NOTHING`)
-      .bind(data.id, ip, ...materials.bets.map(q => a[q.qid]), a.SL1, a.P_A6, quota, quota).run();
+      .bind(data.id, ip, a.SL1, a.P_A6, a.duration_seconds, a.practice_retry_count, quota, quota).run();
   }
   return json({ status: await statusFor(db, data.id, ip, quota) });
 }
@@ -65,13 +69,13 @@ async function exportAnswers(request, env) {
   const { last } = await db.prepare("SELECT COALESCE(MAX(rowid), 0) AS last FROM supplement_responses").first();
   let after = 0;
   const rows = [];
-  while (after < last) {
-    const { results } = await db.prepare(`SELECT rowid AS sequence, response_id, submitted_at, a1,a2,a3,a4,a5,sl1,p_a6
+  do {
+    const { results } = await db.prepare(`SELECT rowid AS sequence, response_id, submitted_at, sl1, p_a6, duration_seconds, practice_retry_count
       FROM supplement_responses WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT 500`).bind(after, last).all();
     if (!results.length) break;
-    for (const r of results) rows.push([r.response_id, r.submitted_at, r.a1, r.a2, r.a3, r.a4, r.a5, r.sl1, r.p_a6]);
+    for (const r of results) rows.push([r.response_id, r.submitted_at, r.sl1, r.p_a6, r.duration_seconds, r.practice_retry_count]);
     after = results.at(-1).sequence;
-  }
+  } while (after < last);
   return new Response(workbook(rows), { headers: {
     "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "Content-Disposition": 'attachment; filename="survey-responses.xlsx"', "Cache-Control": "no-store"
