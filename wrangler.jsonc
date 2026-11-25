@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gra-thesis",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-05-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./docs",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_id": "62ae6239-7ea6-4962-bf83-c9c113c7a58f",
+      "migrations_table": "gra_survey_migrations"
+    }
+  ],
+  "vars": { "SURVEY_ORIGIN": "https://jelllly-y.github.io" },
+  "env": {
+    "local": {
+      "name": "gra-thesis-survey",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_id": "00000000-0000-4000-8000-000000000001",
+          "migrations_table": "gra_survey_migrations"
+        }
+      ],
+      "vars": { "SURVEY_ORIGIN": "https://jelllly-y.github.io" }
+    }
+  }
+}

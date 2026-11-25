@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>经济决策实验问卷</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./dice.css">
+  <script src="./dice.js" defer></script>
+  <script type="module" src="./survey.js"></script>
+</head>
+<body>
+  <main class="card">
+    <p id="storage-warning" hidden>当前浏览器无法保存本地进度，请在本页完成作答。</p>
+    <div class="progress-bar" role="progressbar" aria-label="作答进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-fill"></div></div>
+    <div id="content" tabindex="-1"><p>正在打开问卷…</p></div>
+    <noscript>请启用 JavaScript 后打开问卷。</noscript>
+  </main>
+</body>
+</html>

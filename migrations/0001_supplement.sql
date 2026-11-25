@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS supplement_responses (
+  response_id TEXT PRIMARY KEY NOT NULL,
+  ip_key TEXT NOT NULL UNIQUE,
+  submitted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  a1 TEXT NOT NULL, a2 TEXT NOT NULL, a3 TEXT NOT NULL, a4 TEXT NOT NULL, a5 TEXT NOT NULL,
+  sl1 INTEGER NOT NULL CHECK (sl1 BETWEEN 0 AND 3),
+  p_a6 TEXT NOT NULL
+);
